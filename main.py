@@ -4,12 +4,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, validator
 import logging
-from datetime import datetime
 from typing import Optional, List, Dict, Any
-import os
-import httpx
 from dotenv import load_dotenv
-import uuid
 from qdrant_client import QdrantClient
 
 load_dotenv()
@@ -86,7 +82,6 @@ class SearchResponse(BaseModel):
     url: str = Field(..., description="가장 관련성 높은 문서의 URL")
     title: str = Field(..., description="가장 관련성 높은 문서의 제목")
     id: int = Field(..., description="가장 관련성 높은 문서의 고유 ID")
-    # related_urls 필드와 confidence 필드를 제거
 
 @app.post("/api/v1/analyze", response_model=AnalyzeResponse)
 def analyze_content(request: AnalyzeRequest):
@@ -112,13 +107,12 @@ def analyze_content(request: AnalyzeRequest):
             )
 
         # 문서 벡터 저장
-        doc_id = request.id  # request.id 사용
         rag_search.save_document(
-            doc_id=doc_id, # doc_id 파라미터 추가
+            doc_id=request.id, 
             subject=request.subject,
             title=request.title,
             url=request.url,
-            summary=result["summary"] # 요약을 전달
+            summary=result["summary"]
         )
         
         logger.info(f"분석 완료: 중요도 {result['importance']}")

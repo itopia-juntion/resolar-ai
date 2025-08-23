@@ -1,3 +1,5 @@
+# models/summarizer.py
+
 import logging
 import re
 from typing import Dict, Any, Optional
@@ -50,7 +52,7 @@ class ContentSummarizer:
         url: str, 
         content: str, 
         timestamp: str,
-        id: int,
+        id: int
     ) -> Optional[Dict[str, Any]]:
         """
         컨텐츠 분석 및 요약

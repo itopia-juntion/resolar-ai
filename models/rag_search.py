@@ -3,7 +3,8 @@ import json
 import logging
 from typing import Dict, Any, List, Optional
 from qdrant_client import QdrantClient
-from qdrant_client.http.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue, FieldIndex, FieldIndexType
+from qdrant_client.http.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
+from utils.solar_client import SolarClient
 
 logger = logging.getLogger(__name__)
 
@@ -17,20 +18,6 @@ class RAGSearch:
         self.solar_client = solar_client
         self.qdrant_client = qdrant_client
         self.collection_name = collection_name
-        self._ensure_collection_exists()
-
-    def _ensure_collection_exists(self):
-        try:
-            self.qdrant_client.get_collection(collection_name=self.collection_name)
-            logger.info(f"Qdrant 컬렉션 '{self.collection_name}'이 이미 존재합니다.")
-        except Exception:
-            self.qdrant_client.create_collection(
-                collection_name=self.collection_name,
-                vectors_config=VectorParams(size=768, distance=Distance.COSINE),
-                # subject 필터링을 위한 인덱스 추가
-                field_index=FieldIndex(name="subject", field_type=FieldIndexType.KEYWORD)
-            )
-            logger.info(f"Qdrant 컬렉션 '{self.collection_name}'을 새로 생성했습니다.")
 
     def save_document(
         self,
@@ -96,10 +83,11 @@ class RAGSearch:
             results = []
             for hit in search_result:
                 results.append({
+                    "id": hit.id,
                     "url": hit.payload["url"],
                     "title": hit.payload["title"],
                     "relevance": hit.score,
-                    "snippet": hit.payload["summary"]
+                    "snippet": hit.payload["summary"],
                 })
                 
             logger.info(f"검색 완료: {len(results)}개 결과 반환")
@@ -116,23 +104,18 @@ class RAGSearch:
             return {
                 "success": True,
                 "answer": "죄송합니다. 관련 자료를 찾을 수 없습니다.",
-                "related_urls": [],
-                "confidence": 0.0
+                "url": "",
+                "title": "",
+                "id": None
             }
 
-        context = ""
-        urls = []
-        for doc in search_results:
-            context += f"제목: {doc['title']}\n내용: {doc['snippet']}\n\n"
-            urls.append({
-                "url": doc["url"],
-                "title": doc["title"],
-                "relevance": doc["relevance"],
-                "snippet": doc["snippet"]
-            })
+        # 가장 관련성 높은 첫 번째 문서만 사용
+        first_doc = search_results[0]
+        
+        context = f"제목: {first_doc['title']}\n내용: {first_doc['snippet']}\n\n"
         
         prompt = f"""
-            다음은 검색된 자료들입니다. 이 자료들을 참고하여 사용자의 질문에 답변해주세요.
+            다음은 검색된 자료입니다. 이 자료를 참고하여 사용자의 질문에 답변해주세요.
 
             [참고 자료]
             {context}
@@ -142,9 +125,7 @@ class RAGSearch:
 
             요구사항:
             1. 참고 자료를 바탕으로 질문에 대한 답변을 생성해주세요.
-            2. 답변에 대한 신뢰도를 0.0 ~ 1.0 사이의 소수점 2자리로 평가해주세요.
-            3. 관련 자료를 찾을 수 없거나 답변이 불확실할 경우, 솔직하게 답변할 수 없다고 말해주세요.
-            4. 답변과 신뢰도를 JSON 형식으로 반환해주세요.
+            2. 답변과 신뢰도를 JSON 형식으로 반환해주세요.
             """
         response_format = {
             "type": "json_schema",
@@ -182,14 +163,16 @@ class RAGSearch:
             return {
                 "success": True,
                 "answer": result["answer"],
-                "related_urls": urls,
-                "confidence": round(result["confidence"], 2)
+                "url": first_doc["url"],
+                "title": first_doc["title"],
+                "id": first_doc["id"]
             }
         except Exception as e:
             logger.error(f"RAG 답변 생성 오류: {str(e)}")
             return {
                 "success": False,
                 "answer": "답변 생성 중 오류가 발생했습니다.",
-                "related_urls": [],
-                "confidence": 0.0
+                "url": "",
+                "title": "",
+                "id": None
             }
