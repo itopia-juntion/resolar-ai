@@ -48,8 +48,10 @@ solar_client = SolarClient(
 )
 
 # Qdrant 클라이언트 초기화
-qdrant_client = QdrantClient(host=settings.qdrant_host, port=settings.qdrant_port)
-
+qdrant_client = QdrantClient(
+    url=settings.qdrant_host,
+    api_key=settings.qdrant_api_key
+)
 # 요약 및 RAG 클래스 초기화
 summarizer = ContentSummarizer(solar_client)
 rag_search = RAGSearch(solar_client, qdrant_client, settings.qdrant_collection_name)
@@ -60,6 +62,7 @@ class AnalyzeRequest(BaseModel):
     url: str = Field(..., description="웹페이지 URL")
     content: str = Field(..., min_length=10, description="웹페이지 내용")
     timestamp: str = Field(..., description="수집 시간 (ISO 8601 형식)")
+    id: int = Field(..., ge=1, description="웹페이지 고유 ID")
     
     @validator('url')
     def validate_url(cls, v):
@@ -80,8 +83,10 @@ class SearchRequest(BaseModel):
 class SearchResponse(BaseModel):
     success: bool
     answer: str = Field(..., description="RAG 기반 답변")
-    related_urls: List[Dict[str, Any]]
-    confidence: float = Field(..., ge=0.0, le=1.0, description="답변 신뢰도")
+    url: str = Field(..., description="가장 관련성 높은 문서의 URL")
+    title: str = Field(..., description="가장 관련성 높은 문서의 제목")
+    id: int = Field(..., description="가장 관련성 높은 문서의 고유 ID")
+    # related_urls 필드와 confidence 필드를 제거
 
 @app.post("/api/v1/analyze", response_model=AnalyzeResponse)
 def analyze_content(request: AnalyzeRequest):
@@ -95,7 +100,8 @@ def analyze_content(request: AnalyzeRequest):
             title=request.title,
             url=request.url,
             content=request.content,
-            timestamp=request.timestamp
+            timestamp=request.timestamp,
+            id=request.id
         )
         
         if not result or not result.get("success"):
@@ -106,13 +112,13 @@ def analyze_content(request: AnalyzeRequest):
             )
 
         # 문서 벡터 저장
-        doc_id = str(uuid.uuid4())
+        doc_id = request.id  # request.id 사용
         rag_search.save_document(
-            doc_id, 
-            request.subject, 
-            request.title, 
-            request.url, 
-            request.content
+            doc_id=doc_id, # doc_id 파라미터 추가
+            subject=request.subject,
+            title=request.title,
+            url=request.url,
+            summary=result["summary"] # 요약을 전달
         )
         
         logger.info(f"분석 완료: 중요도 {result['importance']}")

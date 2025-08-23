@@ -1,10 +1,9 @@
 # models/rag_search.py
-
+import json
 import logging
 from typing import Dict, Any, List, Optional
 from qdrant_client import QdrantClient
-from qdrant_client.http.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
-from utils.solar_client import SolarClient
+from qdrant_client.http.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue, FieldIndex, FieldIndexType
 
 logger = logging.getLogger(__name__)
 
@@ -27,23 +26,25 @@ class RAGSearch:
         except Exception:
             self.qdrant_client.create_collection(
                 collection_name=self.collection_name,
-                vectors_config=VectorParams(size=768, distance=Distance.COSINE)
+                vectors_config=VectorParams(size=768, distance=Distance.COSINE),
+                # subject 필터링을 위한 인덱스 추가
+                field_index=FieldIndex(name="subject", field_type=FieldIndexType.KEYWORD)
             )
             logger.info(f"Qdrant 컬렉션 '{self.collection_name}'을 새로 생성했습니다.")
 
     def save_document(
         self,
-        doc_id: str,
+        doc_id: int,
         subject: str,
         title: str,
         url: str,
-        content: str
+        summary: str,
     ) -> bool:
         """
         문서를 임베딩하여 Qdrant에 저장
         """
         try:
-            embedding = self.solar_client.generate_embedding(texts=[content])[0]
+            embedding = self.solar_client.generate_embedding(texts=[summary])[0]
             
             point = PointStruct(
                 id=doc_id,
@@ -52,7 +53,7 @@ class RAGSearch:
                     "subject": subject,
                     "title": title,
                     "url": url,
-                    "content": content
+                    "summary": summary
                 }
             )
             
@@ -98,7 +99,7 @@ class RAGSearch:
                     "url": hit.payload["url"],
                     "title": hit.payload["title"],
                     "relevance": hit.score,
-                    "snippet": hit.payload["content"][:200] + "..."
+                    "snippet": hit.payload["summary"]
                 })
                 
             logger.info(f"검색 완료: {len(results)}개 결과 반환")
