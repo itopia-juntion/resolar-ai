@@ -41,26 +41,23 @@ qdrant_client = QdrantClient(
 )
 
 rag_search_tool = RAGSearch(solar_client, qdrant_client, settings.qdrant_collection_name)
-web_search_tool = WebSearchTool()
+web_search_tool = WebSearchTool(brave_search_api_key=settings.brave_search_api_key) 
 report_generator = ReportGenerator(solar_client)
 
 ### 노드(Node) 정의
 
 def get_db_content(state: GraphState):
-    """벡터 DB에서 문서들을 검색하는 노드"""
+    """벡터 DB에서 문서들을 검색하고, 다음 단계(노드 이름)를 결정하는 노드"""
     subject = state["subject"]
     db_results = rag_search_tool.get_all_documents_by_subject(subject)
-    return {"db_results": db_results}
-
-def decide_to_search_web(state: GraphState):
-    """웹 검색 여부를 결정하는 의사결정 노드"""
-    db_results = state["db_results"]
+    
+    # 여기서 다음 단계를 결정하는 로직을 수행
     if not db_results or len(db_results) < 5:
         logger.info("DB 자료가 충분하지 않아 웹 검색을 진행합니다.")
-        return "web_search"
+        return {"db_results": db_results, "next": "web_search"}
     else:
         logger.info("DB 자료가 충분하여 웹 검색을 건너뜁니다.")
-        return "generate_report"
+        return {"db_results": db_results, "next": "generate_report"}
 
 def search_web(state: GraphState):
     """웹을 검색하는 노드"""
@@ -88,28 +85,24 @@ workflow = StateGraph(GraphState)
 
 # 노드 추가
 workflow.add_node("get_db_content", get_db_content)
-workflow.add_node("decide_to_search_web", decide_to_search_web)
 workflow.add_node("search_web", search_web)
 workflow.add_node("generate_report", generate_report)
 
 # 시작점 설정
 workflow.set_entry_point("get_db_content")
 
-# 엣지 연결
-workflow.add_edge("get_db_content", "decide_to_search_web")
-workflow.add_edge("search_web", "generate_report")
-
 # 조건부 엣지 (의사결정)
 workflow.add_conditional_edges(
-    "decide_to_search_web",
-    decide_to_search_web,
+    "get_db_content",
+    lambda state: state["next"],
     {
         "web_search": "search_web",
         "generate_report": "generate_report"
     }
 )
 
-# 끝점 설정
+# 일반 엣지 연결
+workflow.add_edge("search_web", "generate_report")
 workflow.add_edge("generate_report", END)
 
 # 그래프 컴파일
