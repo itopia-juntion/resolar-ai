@@ -24,6 +24,7 @@ class GraphState(TypedDict):
     """
     LangGraph 상태를 정의하는 클래스
     """
+    user_id: str  # user_id 필드 추가
     subject: str
     db_results: List[Dict[str, Any]]
     web_results: List[Dict[str, Any]]
@@ -40,7 +41,8 @@ qdrant_client = QdrantClient(
     api_key=settings.qdrant_api_key
 )
 
-rag_search_tool = RAGSearch(solar_client, qdrant_client, settings.qdrant_collection_name)
+# RAGSearch는 이제 생성자에서 collection_name을 받지 않습니다.
+rag_search_tool = RAGSearch(solar_client, qdrant_client)
 web_search_tool = WebSearchTool(brave_search_api_key=settings.brave_search_api_key) 
 report_generator = ReportGenerator(solar_client)
 
@@ -48,8 +50,9 @@ report_generator = ReportGenerator(solar_client)
 
 def get_db_content(state: GraphState):
     """벡터 DB에서 문서들을 검색하고, 다음 단계(노드 이름)를 결정하는 노드"""
+    user_id = state["user_id"] # user_id 받기
     subject = state["subject"]
-    db_results = rag_search_tool.get_all_documents_by_subject(subject)
+    db_results = rag_search_tool.get_all_documents_by_subject(user_id, subject) # user_id 전달
     
     # 여기서 다음 단계를 결정하는 로직을 수행
     if not db_results or len(db_results) < 5:

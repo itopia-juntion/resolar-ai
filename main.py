@@ -7,15 +7,17 @@ import logging
 from typing import Optional, List, Dict, Any
 from dotenv import load_dotenv
 from qdrant_client import QdrantClient
+import os
+import uuid
 
 load_dotenv()
 
 from utils.solar_client import SolarClient
 from models.summarizer import ContentSummarizer
 from models.rag_search import RAGSearch
-from models.report_generator import ReportGenerator
 from config import get_settings
-from report_agent import app as report_agent_app
+from report_agent import app as report_agent_app  
+
 # 로깅 설정
 logging.basicConfig(
     level=logging.INFO,
@@ -51,9 +53,11 @@ qdrant_client = QdrantClient(
 )
 # 요약 및 RAG 클래스 초기화
 summarizer = ContentSummarizer(solar_client)
-rag_search = RAGSearch(solar_client, qdrant_client, settings.qdrant_collection_name)
+# RAGSearch는 이제 생성자에서 collection_name을 받지 않습니다.
+rag_search = RAGSearch(solar_client, qdrant_client)
 
 class AnalyzeRequest(BaseModel):
+    user_id: int = Field(..., description="사용자 ID")
     subject: str = Field(..., min_length=1, max_length=200, description="자료 조사 폴더명")
     title: str = Field(..., min_length=1, max_length=500, description="웹페이지 제목")
     url: str = Field(..., description="웹페이지 URL")
@@ -73,6 +77,7 @@ class AnalyzeResponse(BaseModel):
     importance: float = Field(..., ge=1.0, le=10.0, description="중요도 점수 (1-10)")
 
 class SearchRequest(BaseModel):
+    user_id: int = Field(..., description="사용자 ID")
     query: str = Field(..., min_length=1, description="검색 쿼리")
     subject: Optional[str] = Field(None, description="폴더명 (선택 사항)")
     limit: int = Field(5, ge=1, le=20, description="검색 결과 개수")
@@ -83,13 +88,9 @@ class SearchResponse(BaseModel):
     url: str = Field(..., description="가장 관련성 높은 문서의 URL")
     title: str = Field(..., description="가장 관련성 높은 문서의 제목")
     id: int = Field(..., description="가장 관련성 높은 문서의 고유 ID")
-    
-class SearchRequest(BaseModel):
-    query: str = Field(..., min_length=1, description="검색 쿼리")
-    subject: Optional[str] = Field(None, description="폴더명 (선택 사항)")
-    limit: int = Field(5, ge=1, le=20, description="검색 결과 개수")
-    
+
 class GenerateReportRequest(BaseModel):
+    user_id: int = Field(..., description="사용자 ID")
     subject: str = Field(..., min_length=1, description="보고서 생성 주제")
 
 class GenerateReportResponse(BaseModel):
@@ -124,6 +125,7 @@ def analyze_content(request: AnalyzeRequest):
 
         # 문서 벡터 저장
         rag_search.save_document(
+            user_id=request.user_id,
             doc_id=request.id, 
             subject=request.subject,
             title=request.title,
@@ -142,8 +144,7 @@ def analyze_content(request: AnalyzeRequest):
             status_code=500,
             detail="서버 내부 오류가 발생했습니다"
         )
-        
-        
+  
 @app.post("/api/v1/papersearch", response_model=AnalyzeResponse)
 def analyze_paper(request: AnalyzeRequest):
     """
@@ -168,6 +169,7 @@ def analyze_paper(request: AnalyzeRequest):
 
         # 문서 벡터 저장
         rag_search.save_document(
+            user_id=request.user_id,
             doc_id=request.id, 
             subject=request.subject,
             title=request.title,
@@ -187,7 +189,7 @@ def analyze_paper(request: AnalyzeRequest):
             detail="서버 내부 오류가 발생했습니다"
         )
         
-        
+              
 @app.post("/api/v1/search", response_model=SearchResponse)
 def search_documents(request: SearchRequest):
     """
@@ -195,6 +197,7 @@ def search_documents(request: SearchRequest):
     """
     try:
         search_results = rag_search.search_documents(
+            user_id=request.user_id,
             query=request.query,
             subject=request.subject,
             limit=request.limit
@@ -230,7 +233,7 @@ async def generate_report_from_subject(request: GenerateReportRequest):
     try:
         logger.info(f"보고서 생성 요청 시작: {request.subject}")
         # LangGraph 에이전트 워크플로 실행
-        final_state = await report_agent_app.ainvoke({"subject": request.subject})
+        final_state = await report_agent_app.ainvoke({"user_id": request.user_id, "subject": request.subject})
         
         report = final_state.get("report")
         
@@ -253,7 +256,6 @@ async def generate_report_from_subject(request: GenerateReportRequest):
             status_code=500,
             detail="보고서 생성 중 서버 내부 오류가 발생했습니다"
         )
-
 
 if __name__ == "__main__":
     import uvicorn
