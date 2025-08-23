@@ -1,6 +1,8 @@
+# utils/solar_client.py
+
 import json
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, List
 from openai import OpenAI  
 
 logger = logging.getLogger(__name__)
@@ -77,3 +79,17 @@ class SolarClient:
                 "summary": "요약 생성 중 오류가 발생했습니다.",
                 "importance": 5.0
             }
+
+    def generate_embedding(self, texts: List[str]) -> List[List[float]]:
+        """
+        텍스트를 임베딩 벡터로 변환
+        """
+        try:
+            response = self.client.embeddings.create(
+                model="solar-embedding-v1",
+                input=texts
+            )
+            return [data.embedding for data in response.data]
+        except Exception as e:
+            logger.error(f"Solar Embedding API 오류: {str(e)}")
+            return []

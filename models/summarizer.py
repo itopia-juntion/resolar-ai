@@ -49,7 +49,8 @@ class ContentSummarizer:
         title: str, 
         url: str, 
         content: str, 
-        timestamp: str  
+        timestamp: str,
+        id: int,
     ) -> Optional[Dict[str, Any]]:
         """
         컨텐츠 분석 및 요약
