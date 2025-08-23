@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     solar_embedding_endpoint: str = "https://api.upstage.ai/v1/solar/embeddings"
     log_level: str = "INFO"
     
+    brave_search_api_key: str
+    
     qdrant_host: str
     qdrant_port: int = 6333
     qdrant_api_key: str

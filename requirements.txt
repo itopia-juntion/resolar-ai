@@ -7,3 +7,7 @@ pydantic-settings
 httpx
 qdrant-client
 numpy
+langchain_community 
+langgraph 
+beautifulsoup4 
+notion-client 

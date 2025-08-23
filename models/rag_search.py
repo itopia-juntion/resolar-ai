@@ -176,3 +176,38 @@ class RAGSearch:
                 "title": "",
                 "id": None
             }
+            
+    def get_all_documents_by_subject(self, subject: str) -> List[Dict[str, Any]]:
+        """
+        특정 주제에 해당하는 모든 문서를 Qdrant에서 가져옵니다.
+        """
+        try:
+            scroll_filter = Filter(
+                must=[
+                    FieldCondition(
+                        key="subject",
+                        match=MatchValue(value=subject)
+                    )
+                ]
+            )
+            
+            records, _ = self.qdrant_client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=scroll_filter,
+                limit=100
+            )
+            
+            documents = []
+            for record in records:
+                documents.append({
+                    "id": record.id,
+                    "url": record.payload["url"],
+                    "title": record.payload["title"],
+                    "summary": record.payload["summary"]
+                })
+            
+            logger.info(f"주제 '{subject}'에 대해 {len(documents)}개 문서 검색 완료.")
+            return documents
+        except Exception as e:
+            logger.error(f"전체 문서 검색 오류: {str(e)}")
+            return []

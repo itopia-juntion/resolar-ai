@@ -13,8 +13,9 @@ load_dotenv()
 from utils.solar_client import SolarClient
 from models.summarizer import ContentSummarizer
 from models.rag_search import RAGSearch
+from models.report_generator import ReportGenerator
 from config import get_settings
-
+from report_agent import app as report_agent_app
 # 로깅 설정
 logging.basicConfig(
     level=logging.INFO,
@@ -82,6 +83,21 @@ class SearchResponse(BaseModel):
     url: str = Field(..., description="가장 관련성 높은 문서의 URL")
     title: str = Field(..., description="가장 관련성 높은 문서의 제목")
     id: int = Field(..., description="가장 관련성 높은 문서의 고유 ID")
+    
+class SearchRequest(BaseModel):
+    query: str = Field(..., min_length=1, description="검색 쿼리")
+    subject: Optional[str] = Field(None, description="폴더명 (선택 사항)")
+    limit: int = Field(5, ge=1, le=20, description="검색 결과 개수")
+    
+class GenerateReportRequest(BaseModel):
+    subject: str = Field(..., min_length=1, description="보고서 생성 주제")
+
+class GenerateReportResponse(BaseModel):
+    success: bool
+    title: str
+    introduction: str
+    body: str
+    conclusion: str
 
 @app.post("/api/v1/analyze", response_model=AnalyzeResponse)
 def analyze_content(request: AnalyzeRequest):
@@ -205,6 +221,39 @@ def search_documents(request: SearchRequest):
             status_code=500,
             detail="서버 내부 오류가 발생했습니다."
         )
+
+@app.post("/api/v1/generate-report", response_model=GenerateReportResponse)
+async def generate_report_from_subject(request: GenerateReportRequest):
+    """
+    LangGraph 에이전트를 사용하여 최종 보고서 생성
+    """
+    try:
+        logger.info(f"보고서 생성 요청 시작: {request.subject}")
+        # LangGraph 에이전트 워크플로 실행
+        final_state = await report_agent_app.ainvoke({"subject": request.subject})
+        
+        report = final_state.get("report")
+        
+        if not report or not isinstance(report, dict):
+             raise HTTPException(
+                status_code=500,
+                detail="보고서 생성 에이전트가 올바른 결과를 반환하지 못했습니다."
+            )
+
+        return GenerateReportResponse(
+            success=True,
+            title=report.get("title", "제목 없음"),
+            introduction=report.get("introduction", ""),
+            body=report.get("body", ""),
+            conclusion=report.get("conclusion", "")
+        )
+    except Exception as e:
+        logger.error(f"보고서 생성 요청 처리 오류: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="보고서 생성 중 서버 내부 오류가 발생했습니다"
+        )
+
 
 if __name__ == "__main__":
     import uvicorn
