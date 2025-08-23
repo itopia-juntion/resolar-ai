@@ -127,6 +127,51 @@ def analyze_content(request: AnalyzeRequest):
             detail="서버 내부 오류가 발생했습니다"
         )
         
+        
+@app.post("/api/v1/papersearch", response_model=AnalyzeResponse)
+def analyze_paper(request: AnalyzeRequest):
+    """
+    대규모 요약
+    """
+    try:
+        result = summarizer.analyze_paper(
+            subject=request.subject,
+            title=request.title,
+            url=request.url,
+            content=request.content,
+            timestamp=request.timestamp,
+            id=request.id
+        )
+        
+        if not result or not result.get("success"):
+            logger.error("컨텐츠 분석 실패")
+            raise HTTPException(
+                status_code=500,
+                detail="컨텐츠 분석 중 오류가 발생했습니다"
+            )
+
+        # 문서 벡터 저장
+        rag_search.save_document(
+            doc_id=request.id, 
+            subject=request.subject,
+            title=request.title,
+            url=request.url,
+            summary=result["summary"]
+        )
+        
+        logger.info(f"분석 완료: 중요도 {result['importance']}")
+        return AnalyzeResponse(**result)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"분석 요청 처리 오류: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="서버 내부 오류가 발생했습니다"
+        )
+        
+        
 @app.post("/api/v1/search", response_model=SearchResponse)
 def search_documents(request: SearchRequest):
     """

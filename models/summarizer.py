@@ -90,3 +90,49 @@ class ContentSummarizer:
                 "summary": "분석 중 오류가 발생했습니다.",
                 "importance": 5.0
             }
+            
+    def analyze_paper(
+        self, 
+        subject: str, 
+        title: str, 
+        url: str, 
+        content: str, 
+        timestamp: str,
+        id: int
+    ) -> Optional[Dict[str, Any]]:
+        """
+        논문 요약 및 분석
+        """
+        try:
+            logger.info(f"논문 분석 시작: {title}")
+            
+            processed_content = self.preprocess_content(content)
+            
+            result = self.solar_client.generate_paper_summary(
+                subject, title, processed_content
+            )
+            
+            if not self.validate_result(result):
+                logger.error("결과 검증 실패")
+                return {
+                    "success": False,
+                    "summary": "결과 검증에 실패했습니다.",
+                    "importance": 5.0
+                }
+            
+            final_result = {
+                "success": True,
+                "summary": result["summary"],
+                "importance": round(result["importance"], 1)
+            }
+            
+            logger.info(f"논문 분석 완료: 중요도 {final_result['importance']}")
+            return final_result
+            
+        except Exception as e:
+            logger.error(f"논문 분석 오류: {str(e)}")
+            return {
+                "success": False,
+                "summary": "분석 중 오류가 발생했습니다.",
+                "importance": 5.0
+            }
