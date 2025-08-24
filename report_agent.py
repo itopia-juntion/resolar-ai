@@ -49,38 +49,55 @@ report_generator = ReportGenerator(solar_client)
 ### 노드(Node) 정의
 
 def get_db_content(state: GraphState):
-    """벡터 DB에서 문서들을 검색하고, 다음 단계(노드 이름)를 결정하는 노드"""
-    user_id = state["user_id"] # user_id 받기
+    """벡터 DB에서 문서들을 검색하는 노드"""
+    user_id = state["user_id"]
     subject = state["subject"]
-    db_results = rag_search_tool.get_all_documents_by_subject(user_id, subject) # user_id 전달
+    db_results = rag_search_tool.get_all_documents_by_subject(user_id, subject)
     
-    # 여기서 다음 단계를 결정하는 로직을 수행
+    logger.info(f"DB에서 {len(db_results)}개 문서 검색 완료")
+    
+    # 상태 업데이트 시 기존 상태를 보존하고 db_results만 업데이트
+    return {"db_results": db_results}
+
+def decide_next_step(state: GraphState):
+    """다음 단계를 결정하는 함수 (조건부 엣지용)"""
+    db_results = state["db_results"]
+    
     if not db_results or len(db_results) < 5:
         logger.info("DB 자료가 충분하지 않아 웹 검색을 진행합니다.")
-        return {"db_results": db_results, "next": "web_search"}
+        return "search_web"
     else:
         logger.info("DB 자료가 충분하여 웹 검색을 건너뜁니다.")
-        return {"db_results": db_results, "next": "generate_report"}
+        return "generate_report"
 
 def search_web(state: GraphState):
     """웹을 검색하는 노드"""
     subject = state["subject"]
     web_results = web_search_tool.search(query=subject + " 최신 동향")
+    logger.info(f"웹에서 {len(web_results)}개 결과 검색 완료")
     return {"web_results": web_results}
 
 def generate_report(state: GraphState):
     """최종 보고서를 생성하는 노드"""
     subject = state["subject"]
     db_results = state["db_results"]
-    web_results = state["web_results"]
+    web_results = state.get("web_results", [])  # web_results가 없을 경우 빈 리스트로 처리
+    
+    logger.info(f"보고서 생성 시작: DB 문서 {len(db_results)}개, 웹 결과 {len(web_results)}개")
     
     report_output = report_generator.generate_final_report(subject, db_results, web_results)
     
     if report_output["success"]:
+        logger.info("보고서 생성 성공")
         return {"report": report_output["report"]}
     else:
-        # 실패 시 에러 처리
-        return {"report": {"title": "보고서 생성 실패", "body": report_output["error"]}}
+        logger.error(f"보고서 생성 실패: {report_output.get('error', '알 수 없는 오류')}")
+        return {"report": {
+            "title": "보고서 생성 실패", 
+            "introduction": "",
+            "body": f"오류 발생: {report_output.get('error', '알 수 없는 오류')}",
+            "conclusion": ""
+        }}
 
 ### 그래프 구축
 
@@ -97,9 +114,9 @@ workflow.set_entry_point("get_db_content")
 # 조건부 엣지 (의사결정)
 workflow.add_conditional_edges(
     "get_db_content",
-    lambda state: state["next"],
+    decide_next_step,  # 별도 함수로 분리
     {
-        "web_search": "search_web",
+        "search_web": "search_web",
         "generate_report": "generate_report"
     }
 )

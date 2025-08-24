@@ -1,5 +1,5 @@
 # models/rag_search.py
-
+import json
 import logging
 from typing import Dict, Any, List, Optional
 from qdrant_client import QdrantClient
@@ -83,18 +83,15 @@ class RAGSearch:
         user_id: str,
         query: str, 
         subject: Optional[str] = None, 
-        limit: int = 5
-    ) -> List[Dict[str, Any]]:
-        """
-        쿼리를 기반으로 관련 문서 검색
-        """
+        limit: int = 5,
+        score_threshold: float = 0.5  # <--- 유사도 점수 임계값 추가
+        ) -> List[Dict[str, Any]]:
         try:
             collection_name = self._get_collection_name(user_id)
-            # 검색 전에 컬렉션 존재 여부 확인
             self._ensure_collection_exists(collection_name) 
-            
+
             query_vector = self.solar_client.generate_embedding(texts=[query])[0]
-            
+
             search_filter = None
             if subject:
                 search_filter = Filter(
@@ -105,14 +102,18 @@ class RAGSearch:
                         )
                     ]
                 )
-            
+            # Qdrant 검색 시 score_threshold를 직접 설정 가능
             search_result = self.qdrant_client.search(
                 collection_name=collection_name,
                 query_vector=query_vector,
                 query_filter=search_filter,
-                limit=limit
+                limit=limit,
+                score_threshold=score_threshold 
             )
-            
+
+            logger.info(f"Qdrant 검색 결과: {search_result}")
+
+
             results = []
             for hit in search_result:
                 results.append({
@@ -122,7 +123,7 @@ class RAGSearch:
                     "relevance": hit.score,
                     "snippet": hit.payload["summary"],
                 })
-                
+
             logger.info(f"검색 완료: {len(results)}개 결과 반환")
             return results
         except Exception as e:
@@ -133,15 +134,15 @@ class RAGSearch:
         """
         검색 결과와 쿼리를 바탕으로 답변 생성
         """
-        # 이 함수는 RAG 답변만 생성하므로 user_id가 필요하지 않습니다.
         if not search_results:
             return {
                 "success": True,
                 "answer": "죄송합니다. 관련 자료를 찾을 수 없습니다.",
                 "url": "",
                 "title": "",
-                "id": None
+                "id": 0
             }
+            
 
         # 가장 관련성 높은 첫 번째 문서만 사용
         first_doc = search_results[0]

@@ -79,15 +79,15 @@ class AnalyzeResponse(BaseModel):
 class SearchRequest(BaseModel):
     user_id: int = Field(..., description="사용자 ID")
     query: str = Field(..., min_length=1, description="검색 쿼리")
-    subject: Optional[str] = Field(None, description="폴더명 (선택 사항)")
+    subject: str = Field(..., description="폴더명")
     limit: int = Field(5, ge=1, le=20, description="검색 결과 개수")
     
 class SearchResponse(BaseModel):
     success: bool
     answer: str = Field(..., description="RAG 기반 답변")
-    url: str = Field(..., description="가장 관련성 높은 문서의 URL")
-    title: str = Field(..., description="가장 관련성 높은 문서의 제목")
-    id: int = Field(..., description="가장 관련성 높은 문서의 고유 ID")
+    url: str = Field(default="", description="가장 관련성 높은 문서의 URL")
+    title: str = Field(default="", description="가장 관련성 높은 문서의 제목")
+    id: int = Field(default=None, description="가장 관련성 높은 문서의 고유 ID")
 
 class GenerateReportRequest(BaseModel):
     user_id: int = Field(..., description="사용자 ID")
@@ -211,9 +211,8 @@ def search_documents(request: SearchRequest):
         if not rag_answer.get("success"):
             raise HTTPException(
                 status_code=500,
-                detail="RAG 답변 생성 중 오류가 발생했습니다."
+                detail="관련 자료를 찾을 수 없습니다."
             )
-            
         return SearchResponse(**rag_answer)
         
     except HTTPException:
