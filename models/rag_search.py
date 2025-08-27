@@ -146,70 +146,91 @@ class RAGSearch:
         # 가장 관련성 높은 첫 번째 문서만 사용
         first_doc = search_results[0]
         
-        context = f"제목: {first_doc['title']}\n내용: {first_doc['snippet']}\n\n"
+            #     try:
+            # response = self.solar_client.client.chat.completions.create(
+            #     model="solar-pro2",
+            #     messages=[{"role": "user", "content": prompt}],
+            #     response_format=response_format,
+            #     temperature=0.3,
+            #     max_tokens=1000
+            # )
         
-        prompt = f"""
-            다음은 검색된 자료입니다. 이 자료를 참고하여 사용자의 질문에 답변해주세요.
-
-            [참고 자료]
-            {context}
-
-            [사용자 질문]
-            {query}
-
-            요구사항:
-            1. 참고 자료를 바탕으로 질문에 대한 답변을 생성해주세요.
-            2. 답변과 신뢰도를 JSON 형식으로 반환해주세요.
-            """
-        response_format = {
-            "type": "json_schema",
-            "json_schema": {
-                "name": "rag_answer",
-                "strict": True,
-                "schema": {
-                    "type": "object",
-                    "properties": {
-                        "answer": {
-                            "type": "string",
-                            "description": "생성된 답변"
-                        },
-                        "confidence": {
-                            "type": "number",
-                            "description": "신뢰도 (0.00-1.00)"
-                        }
-                    },
-                    "required": ["answer", "confidence"]
+        logger.info(f"RAG 답변 생성: {first_doc['title']}")
+           
+        if first_doc["relevance"]:    
+            # result = json.loads(first_doc.choices[0].message.content)
+            return {
+                    "success": True,
+                    "answer": first_doc["snippet"],
+                    "url": first_doc["url"],
+                    "title": first_doc["title"],
+                    "id": first_doc["id"]
                 }
-            }
-        }
         
-        try:
-            response = self.solar_client.client.chat.completions.create(
-                model="solar-pro2",
-                messages=[{"role": "user", "content": prompt}],
-                response_format=response_format,
-                temperature=0.3,
-                max_tokens=1000
-            )
+        # context = f"제목: {first_doc['title']}\n내용: {first_doc['snippet']}\n\n"
+        
+        # prompt = f"""
+        #     다음은 검색된 자료입니다. 이 자료를 참고하여 사용자의 질문에 답변해주세요.
+
+        #     [참고 자료]
+        #     {context}
+
+        #     [사용자 질문]
+        #     {query}
+
+        #     요구사항:
+        #     1. 참고 자료를 바탕으로 질문에 대한 답변을 생성해주세요.
+        #     2. 답변과 신뢰도를 JSON 형식으로 반환해주세요.
+        #     """
+        # response_format = {
+        #     "type": "json_schema",
+        #     "json_schema": {
+        #         "name": "rag_answer",
+        #         "strict": True,
+        #         "schema": {
+        #             "type": "object",
+        #             "properties": {
+        #                 "answer": {
+        #                     "type": "string",
+        #                     "description": "생성된 답변"
+        #                 },
+        #                 "confidence": {
+        #                     "type": "number",
+        #                     "description": "신뢰도 (0.00-1.00)"
+        #                 }
+        #             },
+        #             "required": ["answer", "confidence"]
+        #         }
+        #     }
+        # }
+        
+        # try:
+        #     response = self.solar_client.client.chat.completions.create(
+        #         model="solar-pro2",
+        #         messages=[{"role": "user", "content": prompt}],
+        #         response_format=response_format,
+        #         temperature=0.3,
+        #         max_tokens=1000
+        #     )
             
-            result = json.loads(response.choices[0].message.content)
+        #     result = json.loads(response.choices[0].message.content)
             
-            return {
-                "success": True,
-                "answer": result["answer"],
-                "url": first_doc["url"],
-                "title": first_doc["title"],
-                "id": first_doc["id"]
-            }
-        except Exception as e:
-            logger.error(f"RAG 답변 생성 오류: {str(e)}")
-            return {
-                "success": False,
-                "answer": "답변 생성 중 오류가 발생했습니다.",
-                "url": "",
-                "title": "",
-                "id": None
-            }
+        #     return {
+        #         "success": True,
+        #         "answer": result["answer"],
+        #         "url": first_doc["url"],
+        #         "title": first_doc["title"],
+        #         "id": first_doc["id"]
+        #     }
+        # except Exception as e:
+        #     logger.error(f"RAG 답변 생성 오류: {str(e)}")
+        #     return {
+        #         "success": False,
+        #         "answer": "답변 생성 중 오류가 발생했습니다.",
+        #         "url": "",
+        #         "title": "",
+        #         "id": None
+        #     }
 
     def get_all_documents_by_subject(self, user_id: str, subject: str) -> List[Dict[str, Any]]:
         """
